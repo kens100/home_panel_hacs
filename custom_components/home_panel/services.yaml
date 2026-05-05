@@ -1,0 +1,11 @@
+set_state:
+  name: Record Home Panel State
+  description: Record the state of the home_panel_hacs (open or closed). This creates/updates the home_panel_hacs.status entity and fires a home_panel_hacs_state_update event.
+  fields:
+    state:
+      name: State
+      description: The state of the home_panel (e.g., 'open', 'closed', 'opening', 'closing')
+      required: true
+      example: 'open'
+      selector:
+        text:

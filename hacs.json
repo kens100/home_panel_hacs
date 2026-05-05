@@ -1,0 +1,6 @@
+{
+  "name": "Home Panel HACS",
+  "render_readme": true,
+  "hacs": "1.30.0",
+  "zip_release": false
+}
