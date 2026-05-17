@@ -100,8 +100,16 @@ class HomePanelHacsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Error communicating with HomePanel: %s", e)
                 errors["base"] = "cannot_connect"
 
+        default_mqtt_server = ""
+        if user_input is not None:
+            default_mqtt_server = user_input.get("mqtt_server", "")
+        else:
+            mqtt_entries = self.hass.config_entries.async_entries("mqtt")
+            if mqtt_entries:
+                default_mqtt_server = mqtt_entries[0].data.get("broker", "")
+
         schema = vol.Schema({
-            vol.Required("mqtt_server", default=""): str,
+            vol.Required("mqtt_server", default=default_mqtt_server): str,
         })
 
         return self.async_show_form(
