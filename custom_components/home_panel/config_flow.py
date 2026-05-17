@@ -58,7 +58,11 @@ class HomePanelHacsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="already_configured")
 
         # set unique id to the host or a mac address if provided.
-        await self.async_set_unique_id(self.host)
+        mac = discovery_info.properties.get("mac")
+        if mac:
+            await self.async_set_unique_id(mac)
+        else:
+            await self.async_set_unique_id(self.host)
         self._abort_if_unique_id_configured()
 
         self.context.update({
