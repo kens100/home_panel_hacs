@@ -36,7 +36,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         state = call.data.get("state", "unknown")
         _LOGGER.info("Home Panel state changed to: %s", state)
         hass.bus.async_fire(f"{DOMAIN}_state_update", {"state": state})
-        hass.states.async_set("home_panel_hacs.status", state)
+        hass.states.async_set(f"{DOMAIN}.status", state)
 
     hass.services.async_register(DOMAIN, "set_state", set_state_service)
 

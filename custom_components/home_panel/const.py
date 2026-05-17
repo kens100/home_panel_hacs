@@ -2,7 +2,7 @@
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 
-DOMAIN = "home_panel_hacs"
+DOMAIN = "home_panel"
 CONF_NAME = "name"
 DEFAULT_NAME = "Home Panel HACS"
 
