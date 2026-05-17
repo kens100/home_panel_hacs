@@ -1,7 +1,21 @@
 """Config flow for Home Panel HACS integration."""
 import logging
+import socket
 import aiohttp
 import voluptuous as vol
+
+def get_local_ip():
+    """Get the local IP address of the Home Assistant host."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
@@ -106,7 +120,12 @@ class HomePanelHacsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         else:
             mqtt_entries = self.hass.config_entries.async_entries("mqtt")
             if mqtt_entries:
-                default_mqtt_server = mqtt_entries[0].data.get("broker", "")
+                broker = mqtt_entries[0].data.get("broker", "")
+                port = mqtt_entries[0].data.get("port", 1883)
+                if broker in ("127.0.0.1", "localhost", "core-mosquitto"):
+                    broker = get_local_ip()
+                if broker:
+                    default_mqtt_server = f"{broker}:{port}"
 
         schema = vol.Schema({
             vol.Required("mqtt_server", default=default_mqtt_server): str,
