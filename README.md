@@ -44,3 +44,4 @@ data:
 ```
 
 You can then trigger automations off the state of `home_panel_hacs.status` or by listening to the `home_panel_hacs_state_update` event.
+It can use for hacs
