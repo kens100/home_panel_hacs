@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#03a9f4" />
+      <stop offset="100%" stop-color="#3f51b5" />
+    </linearGradient>
+    <linearGradient id="panelGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#e0e0e0" stop-opacity="0.8" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bgGradient)" />
+
+  <!-- Main Panel -->
+  <rect x="106" y="86" width="300" height="340" rx="30" fill="url(#panelGradient)" filter="url(#shadow)" />
+
+  <!-- Top Display Area -->
+  <rect x="136" y="116" width="240" height="120" rx="15" fill="#2c3e50" />
+  <!-- Temperature Text/Icon -->
+  <path d="M 186 156 Q 196 156 196 176 Q 196 186 186 196 Q 176 186 176 176 Q 176 156 186 156 Z" fill="#ff5252" />
+  <circle cx="186" cy="190" r="10" fill="#ff5252" />
+  <rect x="183" y="146" width="6" height="40" rx="3" fill="#ff5252" />
+  <text x="216" y="186" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff">25°</text>
+
+  <!-- Humidity Text/Icon -->
+  <path d="M 286 156 L 286 176 C 286 186 306 186 306 176 L 306 156 C 306 146 286 146 286 156 Z" fill="#00bcd4" transform="matrix(0.7 0 0 0.8 70 30)" />
+  <path d="M 306 148 Q 306 168 316 188 Q 326 198 306 208 Q 286 198 296 188 Q 306 168 306 148 Z" fill="#00bcd4" />
+  <text x="336" y="186" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff">45%</text>
+
+  <!-- Divider -->
+  <line x1="136" y1="266" x2="376" y2="266" stroke="#cfd8dc" stroke-width="3" />
+
+  <!-- Door Control Section -->
+  <!-- Door Icon -->
+  <rect x="156" y="306" width="60" height="80" rx="5" fill="#607d8b" />
+  <rect x="161" y="311" width="50" height="75" rx="3" fill="#455a64" />
+  <rect x="201" y="346" width="5" height="10" rx="2" fill="#ffc107" />
+  
+  <!-- Wi-Fi / Signal Icon -->
+  <path d="M 276 336 Q 306 306 336 336" fill="none" stroke="#607d8b" stroke-width="6" stroke-linecap="round" />
+  <path d="M 286 356 Q 306 336 326 356" fill="none" stroke="#607d8b" stroke-width="6" stroke-linecap="round" />
+  <circle cx="306" cy="376" r="6" fill="#607d8b" />
+
+</svg>

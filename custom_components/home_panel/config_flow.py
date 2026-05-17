@@ -28,6 +28,8 @@ class HomePanelHacsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             self.host = user_input[CONF_HOST]
+            await self.async_set_unique_id(self.host)
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(title=self.name, data=user_input)
 
         return self.async_show_form(
@@ -47,6 +49,13 @@ class HomePanelHacsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.name = discovery_info.name.split(".")[0]
 
         _LOGGER.info("Discovered HomePanel via mDNS at %s:%s", self.host, self.port)
+
+        # Check existing entries to prevent loops if IP or hostname matches
+        hostname = discovery_info.hostname.rstrip(".") if discovery_info.hostname else ""
+        for entry in self._async_current_entries():
+            entry_host = entry.data.get(CONF_HOST, "")
+            if entry_host in (self.host, hostname, "homepanel.local"):
+                return self.async_abort(reason="already_configured")
 
         # set unique id to the host or a mac address if provided.
         await self.async_set_unique_id(self.host)
