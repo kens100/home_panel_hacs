@@ -1,10 +1,11 @@
 """The Home Panel HACS integration."""
 import logging
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components import mqtt
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     DOMAIN,
@@ -21,15 +22,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-DATA_CONFIG = f"{DOMAIN}_config"
-DATA_DOOR_STATE = f"{DOMAIN}_door_state"
+PLATFORMS = ["sensor", "binary_sensor"]
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Home Panel HACS integration."""
     _LOGGER.info("Initializing Home Panel HACS")
-
-    hass.data.setdefault(DATA_CONFIG, {})
-    hass.data.setdefault(DATA_DOOR_STATE, {"signal": None, "state": None})
 
     async def set_state_service(call):
         """Handle the service call to set home panel state."""
@@ -44,7 +41,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Home Panel from a config entry."""
-    _LOGGER.info("Setting up Home Panel from config entry")
+    _LOGGER.info("Setting up Home Panel from config entry: %s", entry.entry_id)
 
     name = entry.data.get(CONF_NAME, DOMAIN)
     temperature_topic = entry.data.get(CONF_TEMPERATURE_TOPIC, DEFAULT_TEMPERATURE_TOPIC)
@@ -52,109 +49,132 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     door_signal_topic = entry.data.get(CONF_DOOR_SIGNAL_TOPIC, DEFAULT_DOOR_SIGNAL_TOPIC)
     door_state_topic = entry.data.get(CONF_DOOR_STATE_TOPIC, DEFAULT_DOOR_STATE_TOPIC)
 
-    hass.data[DATA_CONFIG] = {
+    # Initialize data structure for this entry
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {
         "name": name,
-        "temperature_topic": temperature_topic,
-        "humidity_topic": humidity_topic,
-        "door_signal_topic": door_signal_topic,
-        "door_state_topic": door_state_topic,
+        "temperature": None,
+        "humidity": None,
+        "door_signal": None,
+        "door_state": None,
+        "door": None,
+        "subscriptions": [],
     }
 
+    # Define robust callbacks supporting both old and new HA MQTT signatures
+    @callback
+    def temperature_message_received(*args, **kwargs):
+        """Handle temperature MQTT message."""
+        if len(args) == 1:
+            msg = args[0]
+            payload = getattr(msg, "payload", msg)
+        else:
+            payload = args[2]
+
+        try:
+            value = float(payload)
+            hass.data[DOMAIN][entry.entry_id]["temperature"] = value
+            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update_temperature", value)
+        except ValueError:
+            _LOGGER.warning("Invalid temperature value: %s", payload)
+
+    @callback
+    def humidity_message_received(*args, **kwargs):
+        """Handle humidity MQTT message."""
+        if len(args) == 1:
+            msg = args[0]
+            payload = getattr(msg, "payload", msg)
+        else:
+            payload = args[2]
+
+        try:
+            value = float(payload.rstrip("%"))
+            hass.data[DOMAIN][entry.entry_id]["humidity"] = value
+            async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update_humidity", value)
+        except ValueError:
+            _LOGGER.warning("Invalid humidity value: %s", payload)
+
+    @callback
+    def door_signal_message_received(*args, **kwargs):
+        """Handle door signal MQTT message."""
+        if len(args) == 1:
+            msg = args[0]
+            payload = getattr(msg, "payload", msg)
+        else:
+            payload = args[2]
+
+        signal_value = payload.lower()
+        hass.data[DOMAIN][entry.entry_id]["door_signal"] = signal_value
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update_door_signal", signal_value)
+        update_door_state(hass, entry.entry_id)
+
+    @callback
+    def door_state_message_received(*args, **kwargs):
+        """Handle door state MQTT message."""
+        if len(args) == 1:
+            msg = args[0]
+            payload = getattr(msg, "payload", msg)
+        else:
+            payload = args[2]
+
+        state_value = payload.lower()
+        hass.data[DOMAIN][entry.entry_id]["door_state"] = "on" if state_value == "open" else "off"
+        async_dispatcher_send(hass, f"{DOMAIN}_{entry.entry_id}_update_door_state", hass.data[DOMAIN][entry.entry_id]["door_state"])
+        update_door_state(hass, entry.entry_id)
+
+    # Subscribe to MQTT topics
     sub1 = await mqtt.async_subscribe(hass, temperature_topic, temperature_message_received)
     sub2 = await mqtt.async_subscribe(hass, humidity_topic, humidity_message_received)
     sub3 = await mqtt.async_subscribe(hass, door_signal_topic, door_signal_message_received)
     sub4 = await mqtt.async_subscribe(hass, door_state_topic, door_state_message_received)
 
-    hass.data.setdefault(f"{DOMAIN}_subscriptions", [])
-    hass.data[f"{DOMAIN}_subscriptions"].extend([sub1, sub2, sub3, sub4])
+    hass.data[DOMAIN][entry.entry_id]["subscriptions"].extend([sub1, sub2, sub3, sub4])
+
+    # Forward entry setup to platforms
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except AttributeError:
+        # Fallback for older Home Assistant versions
+        for platform in PLATFORMS:
+            hass.async_create_task(
+                hass.config_entries.async_forward_entry_setup(entry, platform)
+            )
 
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    subs = hass.data.get(f"{DOMAIN}_subscriptions", [])
-    for sub_unsubscribe in subs:
-        sub_unsubscribe()
-    hass.data.pop(f"{DOMAIN}_subscriptions", None)
+    try:
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    except AttributeError:
+        # Fallback for older Home Assistant versions
+        import asyncio
+        unload_ok = all(
+            await asyncio.gather(
+                *[
+                    hass.config_entries.async_forward_entry_unload(entry, platform)
+                    for platform in PLATFORMS
+                ]
+            )
+        )
     
-    return True
+    if unload_ok:
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if entry_data and "subscriptions" in entry_data:
+            for unsubscribe in entry_data["subscriptions"]:
+                unsubscribe()
+    
+    return unload_ok
 
-
-def temperature_message_received(hass, topic, payload, qos):
-    """Handle temperature MQTT message."""
-    try:
-        value = float(payload)
-        config = hass.data[DATA_CONFIG]
-        name = config["name"]
-        hass.states.async_set(
-            "sensor.home_panel_temperature",
-            value,
-            {"unit_of_measurement": "°C", "friendly_name": f"{name} Temperature", "icon": "mdi:thermometer"},
-        )
-    except ValueError:
-        _LOGGER.warning("Invalid temperature value: %s", payload)
-
-
-def humidity_message_received(hass, topic, payload, qos):
-    """Handle humidity MQTT message."""
-    try:
-        value = float(payload.rstrip("%"))
-        config = hass.data[DATA_CONFIG]
-        name = config["name"]
-        hass.states.async_set(
-            "sensor.home_panel_humidity",
-            value,
-            {"unit_of_measurement": "%", "friendly_name": f"{name} Humidity", "icon": "mdi:water-percent"},
-        )
-    except ValueError:
-        _LOGGER.warning("Invalid humidity value: %s", payload)
-
-
-def door_signal_message_received(hass, topic, payload, qos):
-    """Handle door signal MQTT message."""
-    config = hass.data[DATA_CONFIG]
-    name = config["name"]
-
-    signal_value = payload.lower()
-    hass.data[DATA_DOOR_STATE]["signal"] = signal_value
-
-    hass.states.async_set(
-        "sensor.home_panel_door_signal",
-        signal_value,
-        {"friendly_name": f"{name} Door Signal", "icon": "mdi:gesture-tap-button"},
-    )
-
-    update_door_state(hass)
-
-
-def door_state_message_received(hass, topic, payload, qos):
-    """Handle door state MQTT message."""
-    config = hass.data[DATA_CONFIG]
-    name = config["name"]
-
-    state_value = payload.lower()
-    hass.data[DATA_DOOR_STATE]["state"] = state_value
-
-    hass.states.async_set(
-        "binary_sensor.home_panel_door_state",
-        "on" if state_value == "open" else "off",
-        {"friendly_name": f"{name} Door State", "device_class": "door"},
-    )
-
-    update_door_state(hass)
-
-
-def update_door_state(hass):
-    """Update door state based on available sensors."""
-    config = hass.data[DATA_CONFIG]
-    name = config["name"]
-    door_data = hass.data[DATA_DOOR_STATE]
-
-    door_state_value = door_data.get("state")
-    door_signal_value = door_data.get("signal")
+def update_door_state(hass: HomeAssistant, entry_id: str):
+    """Update combined door state based on available sensors."""
+    entry_data = hass.data[DOMAIN][entry_id]
+    
+    door_state_value = entry_data.get("door_state")
+    door_signal_value = entry_data.get("door_signal")
 
     if door_state_value is not None:
-        final_state = "on" if door_state_value == "open" else "off"
+        final_state = door_state_value
         _LOGGER.info("Door state from sensor: %s", door_state_value)
     elif door_signal_value is not None:
         final_state = "on" if door_signal_value == "clicked" else "off"
@@ -162,8 +182,5 @@ def update_door_state(hass):
     else:
         final_state = "unavailable"
 
-    hass.states.async_set(
-        "binary_sensor.home_panel_door",
-        final_state,
-        {"friendly_name": f"{name} Door", "device_class": "door"},
-    )
+    entry_data["door"] = final_state
+    async_dispatcher_send(hass, f"{DOMAIN}_{entry_id}_update_door", final_state)
